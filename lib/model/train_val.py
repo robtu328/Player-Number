@@ -112,7 +112,7 @@ class SolverWrapper(object):
             cur_val = pickle.load(fid)
             perm_val = pickle.load(fid)
             last_snapshot_iter = pickle.load(fid)
-############### <------------------------------------------------ REMETTRE ça apres premier checkpoint
+############### <------------------------------------------------ REMETTRE ça apres premier checkpoint
             np.random.set_state(st0)
             self.data_layer._cur = cur
             self.data_layer._perm = perm
