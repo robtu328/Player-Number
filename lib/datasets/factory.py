@@ -15,11 +15,11 @@ from datasets.coco import coco
 
 import numpy as np
 
-# Set up voc_<year>_<split>
-# for year in ['2007', '2012']:
-#     for split in ['train', 'val', 'trainval', 'test']:
-#         name = 'voc_{}_{}'.format(year, split)
-#         __sets[name] = (lambda split=split, year=year: pascal_voc(split, year))
+#Set up voc_<year>_<split>
+for year in ['2007', '2012']:
+    for split in ['train', 'val', 'trainval', 'test']:
+        name = 'voc_{}_{}'.format(year, split)
+        __sets[name] = (lambda split=split, year=year: pascal_voc(split, year))
 
 # for year in ['2007', '2012']:
 #     for split in ['train', 'val', 'trainval', 'test']:
@@ -38,10 +38,10 @@ import numpy as np
 #         name = 'coco_{}_{}'.format(year, split)
 #         __sets[name] = (lambda split=split, year=year: coco(split, year))
 
-for year in ['2017']:
-  for split in ['train', 'val']: #'test'
-    name = 'coco_{}_{}'.format(year, split)
-    __sets[name] = (lambda split=split, year=year: coco(split, year))
+#for year in ['2017']:
+#  for split in ['train', 'val']: #'test'
+#    name = 'coco_{}_{}'.format(year, split)
+#    __sets[name] = (lambda split=split, year=year: coco(split, year))
 
 def get_imdb(name):
     """Get an imdb (image database) by name."""
