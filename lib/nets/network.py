@@ -32,7 +32,7 @@ from model.config import cfg
 
 import tensorboardX as tb
 
-#from scipy.misc import imresize
+from scipy.misc import imresize
 
 
 class Network(nn.Module):
@@ -55,8 +55,8 @@ class Network(nn.Module):
     def _add_gt_image(self):
         # add back mean
         image = self._image_gt_summaries['image'] + cfg.PIXEL_MEANS
-        #image = imresize(image[0], self._im_info[:2] / self._im_info[2])
-        image = np.array(Image.fromarray(image).resize((h, int(self._im_info[:2] / self._im_info[2])))) 
+        image = imresize(image[0], self._im_info[:2] / self._im_info[2])
+        #image = np.array(Image.fromarray(image).resize((h, int(self._im_info[:2] / self._im_info[2])))) 
 
         # BGR to RGB (opencv uses BGR)
         self._gt_image = image[np.newaxis, :, :, ::-1].copy(order='C')
@@ -246,7 +246,8 @@ class Network(nn.Module):
         label = self._proposal_targets["labels"].view(-1, 1)
         # ind = self._proposal_targets["labels"]#.view(-1, 1)
         # print(ind.size())
-        label = torch.zeros(label.size(0), 3).to(self._device).scatter_(1, label, 1) ##### change 3 to more generic
+        # label = torch.zeros(label.size(0), 3).to(self._device).scatter_(1, label, 1) ##### change 3 to more generic
+        label = torch.zeros(label.size(0), self._num_classes).to(self._device).scatter_(1, label, 1) ##### change 3 to more generic
         # label = torch.sparse.torch.eye(3).to(self._device).index_select(dim=0, index=ind)
         # label = torch.
         output = self._caps_output["output"]
@@ -254,7 +255,7 @@ class Network(nn.Module):
         data = self._caps_output["data"]
 
         # loss = capsule_net.loss(data, output, target, reconstructions)
-        cross_entropy = self.cls_score_net.loss(data, output, label, rec) ### not cross entropy but doesn't matter for now
+        cross_entropy = self.cls_score_net.loss(data, output, label, rec) ### not cross entropy but doesn't matter for now
 
         # TODO: reverifier min & max image avec bon avg
         # print('max data: ', torch.max(data))
@@ -285,14 +286,15 @@ class Network(nn.Module):
         return loss
 
     def _region_proposal(self, net_conv):
-        rpn = F.relu(self.rpn_net(net_conv))
-        self._act_summaries['rpn'] = rpn
+        rpn = F.relu(self.rpn_net(net_conv)) #rpn_net = conv2d
+        self._act_summaries['rpn'] = rpn   #rpn.size()=1,512, 37, 50
 
-        rpn_cls_score = self.rpn_cls_score_net(
-            rpn)  # batch * (num_anchors * 2) * h * w
+        rpn_cls_score = self.rpn_cls_score_net(  #conv2d
+            rpn)  # batch * (num_anchors * 2) * h * w, rpn_clas_score=1, 18, 37, 50
 
         # change it so that the score has 2 as its channel size
-        rpn_cls_score_reshape = rpn_cls_score.view(
+        #rpn_cls_score_reshape = rpn_cls_score.view(
+        rpn_cls_score_reshape = rpn_cls_score.reshape(
             1, 2, -1,
             rpn_cls_score.size()[-1])  # batch * 2 * (num_anchors*h) * w
         rpn_cls_prob_reshape = F.softmax(rpn_cls_score_reshape, dim=1)
@@ -306,7 +308,7 @@ class Network(nn.Module):
             0, 2, 3, 1).contiguous()  # batch * (num_anchors*h) * w * 2
         rpn_cls_pred = torch.max(rpn_cls_score_reshape.view(-1, 2), 1)[1]
 
-        rpn_bbox_pred = self.rpn_bbox_pred_net(rpn)
+        rpn_bbox_pred = self.rpn_bbox_pred_net(rpn)   #conv2d
         rpn_bbox_pred = rpn_bbox_pred.permute(
             0, 2, 3, 1).contiguous()  # batch * h * w * (num_anchors*4)
 
@@ -346,7 +348,7 @@ class Network(nn.Module):
         cls_pred = torch.max(masked, 1)[1] # index of max
         # print(cls_score)
         # print(cls_score.size())
-        cls_prob = F.softmax(cls_score, dim=1) ## Do not use softmax
+        cls_prob = F.softmax(cls_score, dim=1) ## Do not use softmax
 
         # print('avg proba: ', cls_prob.mean(0))
         # print('avg output: ', cls_score.mean(0))
@@ -414,9 +416,9 @@ class Network(nn.Module):
         self.rpn_bbox_pred_net = nn.Conv2d(cfg.RPN_CHANNELS,
                                            self._num_anchors * 4, [1, 1])
 
-        # self.cls_score_net = CapsNet(self._net_conv_channels, self._num_classes)
-        self.cls_score_net = CapsNet(3, self._num_classes)
-        # self.cls_score_net = nn.Linear(self._fc7_channels, self._num_classes) ##### <------- CAPS
+        self.cls_score_net = CapsNet(28, self._net_conv_channels, self._num_classes)
+        #self.cls_score_net = CapsNet(3, self._num_classes)
+        # self.cls_score_net = nn.Linear(self._fc7_channels, self._num_classes) ##### <------- CAPS
         self.bbox_pred_net = nn.Linear(self._fc7_channels,
                                        self._num_classes * 4)
 
@@ -458,21 +460,21 @@ class Network(nn.Module):
     def _predict(self):
         # This is just _build_network in tf-faster-rcnn
         torch.backends.cudnn.benchmark = False
-        net_conv = self._image_to_head()
-        # print("net_conv size: ", net_conv.size())
+        net_conv = self._image_to_head()  # image -> features vgg16
+        # print("net_conv size: ", net_conv.size())   image=(1, 3, 600, 800) net_conv=(1,512,37,50)
         # print('net conv size: ', net_conv.size())
         # build the anchors for the image
         self._anchor_component(net_conv.size(2), net_conv.size(3))
 
         rois = self._region_proposal(net_conv) # quand on appelle region_proposal on enregistre les resultats en même temps
-        # print('rois size: ', rois.size())
+        # print('rois size: ', rois.size()), RPN
         if cfg.POOLING_MODE == 'align':
             pool5 = self._roi_align_layer(net_conv, rois)
 
-            # print('mean image ', self._image.mean())
+            # print('mean image ', self._image.mean()), pool5=256,512,7,7
 
             pool5_cl = self._roi_align_layer_class(self._image, rois, scale=1.0)#net_conv, rois)
-            # print('pool5 size:', pool5.size())
+            # print('pool5 size:', pool5.size()), pool5_cl=256, 3, 28, 28
         else:
             pool5 = self._roi_pool_layer(net_conv, rois)
 
@@ -480,8 +482,8 @@ class Network(nn.Module):
             torch.backends.cudnn.benchmark = True  # benchmark because now the input size are fixed
 
         # print('pool5 size: ', pool5.size())
-        fc7 = self._head_to_tail(pool5)
-        # print('fc7 size: ', fc7.size())
+        fc7 = self._head_to_tail(pool5) 
+        # print('fc7 size: ', fc7.size()), fc7=256, 4096
 
         cls_prob, bbox_pred = self._region_classification(fc7, pool5, pool5_cl)
         # print('cls_prob size: ', cls_prob.size())

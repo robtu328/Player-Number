@@ -30,10 +30,14 @@ from torch.autograd import Variable
 
 
 #
-reduced = 6 ########### beurk change
+# reduced = 6 ########### beurk change
 # reduced = 7
+reduced = 8
 USE_CUDA = True
 img_size = 28
+img_sizeH = 50
+img_sizeW = 37
+
 
 
 class ConvLayer(nn.Module):
@@ -43,14 +47,15 @@ class ConvLayer(nn.Module):
         self.conv = nn.Conv2d(in_channels=in_channels,
                                out_channels=out_channels,
                                kernel_size=kernel_size,
-                               stride=1
+                               stride=1, 
+                               padding=2
                              )
     def forward(self, x):
         return F.relu(self.conv(x))
 
 
 class PrimaryCaps(nn.Module):
-    def __init__(self, num_capsules=8, in_channels=256, out_channels=32, kernel_size=9):
+    def __init__(self, num_capsules=8, in_channels=512, out_channels=64, kernel_size=9):
         super(PrimaryCaps, self).__init__()
 
         self.capsules = nn.ModuleList([
@@ -62,7 +67,7 @@ class PrimaryCaps(nn.Module):
     def forward(self, x):
         u = [capsule(x) for capsule in self.capsules]
         u = torch.stack(u, dim=1)
-        u = u.view(x.size(0), 32 * reduced * reduced, -1)
+        u = u.view(x.size(0), 64 * reduced * reduced, -1)
         return self.squash(u)
 
     def squash(self, input_tensor):
@@ -72,7 +77,7 @@ class PrimaryCaps(nn.Module):
 
 #out_channels = 16
 class DigitCaps(nn.Module):
-    def __init__(self, num_capsules=3, num_routes=32 * reduced * reduced, in_channels=8, out_channels=32):
+    def __init__(self, num_capsules=3, num_routes=64 * reduced * reduced, in_channels=8, out_channels=16):
         super(DigitCaps, self).__init__()
 
         self.in_channels = in_channels
@@ -82,6 +87,7 @@ class DigitCaps(nn.Module):
         self.W = nn.Parameter(torch.randn(1, num_routes, num_capsules, out_channels, in_channels))
 
     def forward(self, x):
+        torch.cuda.empty_cache() 
         batch_size = x.size(0)
         x = torch.stack([x] * self.num_capsules, dim=2).unsqueeze(4)
 
@@ -119,8 +125,10 @@ class Decoder(nn.Module):
 
         # '''
         # 32 * 3 = nb_classes * nb_channels
+        # 21 X 16
         self.reconstruction_layers = nn.Sequential(
-            nn.Linear(32 * 3, 512),
+            #nn.Linear(32 * 3, 512),
+            nn.Linear(336, 512),
             nn.ReLU(inplace=True),
             nn.Linear(512, 1024),
             nn.ReLU(inplace=True),
@@ -154,15 +162,20 @@ class Decoder(nn.Module):
 class CapsNet(nn.Module):
     def __init__(self, img_size = 28, num_filters = 512, num_classes = 3):
         super(CapsNet, self).__init__()
-        self.conv_layer = ConvLayer(in_channels=num_filters)
-        self.primary_capsules = PrimaryCaps()
+        #self.conv_layer = ConvLayer(in_channels=num_filters)
+        self.conv_layer = ConvLayer(out_channels=num_filters)
+        #self.primary_capsules = PrimaryCaps()
+        self.primary_capsules = PrimaryCaps(in_channels=num_filters, out_channels=64 )
         self.digit_capsules = DigitCaps(num_capsules=num_classes)
         self.decoder = Decoder()
         self.mse_loss = nn.MSELoss()
         self._img_size = img_size
 
     def forward(self, data):
-        output = self.digit_capsules(self.primary_capsules(self.conv_layer(data)))
+        tmp=self.conv_layer(data)
+        tmp1=self.primary_capsules(tmp)
+        output=self.digit_capsules(tmp1)
+        #output = self.digit_capsules(self.primary_capsules(self.conv_layer(data)))
         # output = self.digit_capsules(self.primary_capsules(data))
 
         reconstructions, masked = self.decoder(output, data)
