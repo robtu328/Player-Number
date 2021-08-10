@@ -173,7 +173,7 @@ class Network(nn.Module):
         rois, roi_scores, labels, bbox_targets, bbox_inside_weights, bbox_outside_weights = \
           proposal_target_layer(
           rois, roi_scores, self._gt_boxes, self._num_classes)
-
+        #print ("rois size(1-1)", rois.size())
         self._proposal_targets['rois'] = rois
         self._proposal_targets['labels'] = labels.long()
         self._proposal_targets['bbox_targets'] = bbox_targets
@@ -315,8 +315,10 @@ class Network(nn.Module):
         if self._mode == 'TRAIN':
             rois, roi_scores = self._proposal_layer(
                 rpn_cls_prob, rpn_bbox_pred)  # rois, roi_scores are varible
+            #print ("rois size(1)= ", rois.size())
             rpn_labels = self._anchor_target_layer(rpn_cls_score)
             rois, _ = self._proposal_target_layer(rois, roi_scores)
+            #print ("rois size(2)= ", rois.size())
         else:
             if cfg.TEST.MODE == 'nms':
                 rois, _ = self._proposal_layer(rpn_cls_prob, rpn_bbox_pred)
@@ -324,7 +326,7 @@ class Network(nn.Module):
                 rois, _ = self._proposal_top_layer(rpn_cls_prob, rpn_bbox_pred)
             else:
                 raise NotImplementedError
-
+        #print ("rois size(3) =", rois.size())
         self._predictions["rpn_cls_score"] = rpn_cls_score
         self._predictions["rpn_cls_score_reshape"] = rpn_cls_score_reshape
         self._predictions["rpn_cls_prob"] = rpn_cls_prob
@@ -342,13 +344,23 @@ class Network(nn.Module):
         output, rec, masked = self.cls_score_net(self._caps_output["data"])#pool5_cl)
         # print("rec size: ", rec.size())
         # print("pool5_cl size: ", pool5_cl.size())
-        cls_score = torch.sqrt((output ** 2).sum(2)).view(-1, output.size(1))#torch.sqrt((output ** 2).sum(2))
+        
+        
+        if(output.size(0)==0):
+            cls_score = torch.empty(0)
+            cls_pred = torch.empty(0)
+            cls_prob = torch.empty(0)
+            bbox_pred = torch.empty(0)
+        else:
+        
+        
+            cls_score = torch.sqrt((output ** 2).sum(2)).view(-1, output.size(1))#torch.sqrt((output ** 2).sum(2))
         # print(cls_score)
         # print(cls_score.size())
-        cls_pred = torch.max(masked, 1)[1] # index of max
+            cls_pred = torch.max(masked, 1)[1] # index of max
         # print(cls_score)
         # print(cls_score.size())
-        cls_prob = F.softmax(cls_score, dim=1) ## Do not use softmax
+            cls_prob = F.softmax(cls_score, dim=1) ## Do not use softmax
 
         # print('avg proba: ', cls_prob.mean(0))
         # print('avg output: ', cls_score.mean(0))
@@ -359,7 +371,7 @@ class Network(nn.Module):
         # print('cls_prob: ', cls_prob)
         # print('masked: ', masked)
         # print('cls_pred: ', cls_pred)
-        bbox_pred = self.bbox_pred_net(fc7)
+            bbox_pred = self.bbox_pred_net(fc7)
 
         self._caps_output["output"] = output
         self._caps_output["rec"] = rec
@@ -467,7 +479,8 @@ class Network(nn.Module):
         self._anchor_component(net_conv.size(2), net_conv.size(3))
 
         rois = self._region_proposal(net_conv) # quand on appelle region_proposal on enregistre les resultats en même temps
-        # print('rois size: ', rois.size()), RPN
+        
+        #print('rois size(4): ', rois.size())
         if cfg.POOLING_MODE == 'align':
             pool5 = self._roi_align_layer(net_conv, rois)
 
@@ -481,7 +494,7 @@ class Network(nn.Module):
         if self._mode == 'TRAIN':
             torch.backends.cudnn.benchmark = True  # benchmark because now the input size are fixed
 
-        # print('pool5 size: ', pool5.size())
+        print('pool5 size(5): ', pool5.size())
         fc7 = self._head_to_tail(pool5) 
         # print('fc7 size: ', fc7.size()), fc7=256, 4096
 

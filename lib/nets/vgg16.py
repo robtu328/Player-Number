@@ -53,9 +53,14 @@ class vgg16(Network):
         return net_conv
 
     def _head_to_tail(self, pool5):
-        pool5_flat = pool5.view(pool5.size(0), -1)
-        # print("pool flat size", pool5_flat.size())
-        fc7 = self.vgg.classifier(pool5_flat)
+        if (pool5.size(0)==0):
+           pool5_flat = pool5.view(0, 25000) 
+           fc7 = pool5_flat
+        else:
+           pool5_flat = pool5.view(pool5.size(0), -1)
+           #print("pool flat size", pool5_flat.size())
+           fc7 = self.vgg.classifier(pool5_flat)
+           #print("FC7 size", fc7.size(), "FC7=", fc7)
 
         return fc7
 

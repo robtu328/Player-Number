@@ -67,7 +67,12 @@ class PrimaryCaps(nn.Module):
     def forward(self, x):
         u = [capsule(x) for capsule in self.capsules]
         u = torch.stack(u, dim=1)
-        u = u.view(x.size(0), 64 * reduced * reduced, -1)
+        if (x.size(0)==0):
+            u=u.view(x.size(0), 64 * reduced * reduced, x.size(1))
+            #print('CapNet Empty tensor =', x.size(0))
+            #return torch.empty(0)
+        else:
+            u = u.view(x.size(0), 64 * reduced * reduced, -1)
         return self.squash(u)
 
     def squash(self, input_tensor):
@@ -85,18 +90,26 @@ class DigitCaps(nn.Module):
         self.num_capsules = num_capsules
 
         self.W = nn.Parameter(torch.randn(1, num_routes, num_capsules, out_channels, in_channels))
+        self._device = 'cuda'
 
     def forward(self, x):
         torch.cuda.empty_cache() 
         batch_size = x.size(0)
+        if (x.size(0)==0) :
+            print("Empty input")
+            #return torch.empty(0)
         x = torch.stack([x] * self.num_capsules, dim=2).unsqueeze(4)
 
         W = torch.cat([self.W] * batch_size, dim=0)
+        
         u_hat = torch.matmul(W, x)
-
+        del W
+        torch.cuda.empty_cache()
+        
         b_ij = Variable(torch.zeros(1, self.num_routes, self.num_capsules, 1))
         if USE_CUDA:
-            b_ij = b_ij.cuda()
+            #b_ij = b_ij.cuda()
+            b_ij = b_ij.to(self._device)
 
         num_iterations = 3
         for iteration in range(num_iterations):
@@ -110,7 +123,14 @@ class DigitCaps(nn.Module):
             if iteration < num_iterations - 1:
                 a_ij = torch.matmul(u_hat.transpose(3, 4), torch.cat([v_j] * self.num_routes, dim=1))
                 b_ij = b_ij + a_ij.squeeze(4).mean(dim=0, keepdim=True)
+                #b_ij = b_ij + torch.matmul(u_hat.transpose(3, 4), torch.cat([v_j] * self.num_routes, dim=1)).squeeze(4).mean(dim=0, keepdim=True)
+            del c_ij, s_j
+            torch.cuda.empty_cache() 
 
+
+        del u_hat, b_ij
+        #v_j.to('cpu')
+        torch.cuda.empty_cache() 
         return v_j.squeeze(1)
 
     def squash(self, input_tensor):
@@ -120,7 +140,7 @@ class DigitCaps(nn.Module):
 
 
 class Decoder(nn.Module):
-    def __init__(self):
+    def __init__(self, num_class=3, in_channel=16):
         super(Decoder, self).__init__()
 
         # '''
@@ -128,14 +148,15 @@ class Decoder(nn.Module):
         # 21 X 16
         self.reconstruction_layers = nn.Sequential(
             #nn.Linear(32 * 3, 512),
-            nn.Linear(336, 512),
+            #nn.Linear(336, 512),
+            nn.Linear(num_class*in_channel, 512),
             nn.ReLU(inplace=True),
             nn.Linear(512, 1024),
             nn.ReLU(inplace=True),
             nn.Linear(1024, img_size*img_size*3),
             nn.Sigmoid()
         )
-
+        self._device = 'cuda'
         # self.out = torch.nn.Tanh()
 
     def forward(self, x, data):
@@ -148,7 +169,8 @@ class Decoder(nn.Module):
         # masked = Variable(torch.sparse.torch.eye(2))
         masked = Variable(torch.sparse.torch.eye(classes.size(1)))
         if USE_CUDA:
-            masked = masked.cuda()
+            #masked = masked.cuda()
+            masked = masked.to(self._device)
         masked = masked.index_select(dim=0, index=max_length_indices.squeeze(1).data)
         # print("masked size: ", masked.size())
         reconstructions = self.reconstruction_layers((x * masked[:, :, None, None]).view(x.size(0), -1))
@@ -167,16 +189,18 @@ class CapsNet(nn.Module):
         #self.primary_capsules = PrimaryCaps()
         self.primary_capsules = PrimaryCaps(in_channels=num_filters, out_channels=64 )
         self.digit_capsules = DigitCaps(num_capsules=num_classes)
-        self.decoder = Decoder()
+        self.decoder = Decoder(num_class=num_classes)
         self.mse_loss = nn.MSELoss()
         self._img_size = img_size
 
     def forward(self, data):
-        tmp=self.conv_layer(data)
-        tmp1=self.primary_capsules(tmp)
-        output=self.digit_capsules(tmp1)
-        #output = self.digit_capsules(self.primary_capsules(self.conv_layer(data)))
+        #tmp=self.conv_layer(data)
+        #tmp1=self.primary_capsules(tmp)
+        #output=self.digit_capsules(tmp1)
+        output = self.digit_capsules(self.primary_capsules(self.conv_layer(data)))
         # output = self.digit_capsules(self.primary_capsules(data))
+        #if(output.size(0)==0):
+        #   return torch.empty(0), torch.empty(0), torch.empty(0) 
 
         reconstructions, masked = self.decoder(output, data)
         return output, reconstructions, masked
