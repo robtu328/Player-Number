@@ -42,10 +42,12 @@ def proposal_target_layer(rpn_rois, rpn_scores, gt_boxes, _num_classes):
 
     # Sample rois with classification labels and bounding box regression
     # targets
+    # print("all_rois size FG, BG detection", all_rois.size())
     labels, rois, roi_scores, bbox_targets, bbox_inside_weights = _sample_rois(
         all_rois, all_scores, gt_boxes, fg_rois_per_image, rois_per_image,
         _num_classes)
 
+    #print ("roi.size(1-3)", rois.size())
     rois = rois.view(-1, 5)
     roi_scores = roi_scores.view(-1)
     labels = labels.view(-1, 1)
@@ -122,7 +124,11 @@ def _sample_rois(all_rois, all_scores, gt_boxes, fg_rois_per_image,
     
     # print(bg_inds, fg_inds)
     # Small modification to the original version where we ensure a fixed number of regions are sampled
-    if fg_inds.numel() > 0 and bg_inds.numel() > 0:
+    if fg_inds.numel()==0 and bg_inds.numel() == 0:
+        to_replace = all_rois.size(0) < rois_per_image
+        bg_inds = torch.from_numpy(npr.choice(np.arange(0, all_rois.size(0)), size=int(rois_per_image), replace=to_replace)).long().cuda()
+        fg_rois_per_image = 0
+    elif fg_inds.numel() > 0 and bg_inds.numel() > 0:
         fg_rois_per_image = min(fg_rois_per_image, fg_inds.numel())
         fg_inds = fg_inds[torch.from_numpy(
             npr.choice(
@@ -157,6 +163,7 @@ def _sample_rois(all_rois, all_scores, gt_boxes, fg_rois_per_image,
         pdb.set_trace()
 
     # The indices that we're selecting (both fg and bg)
+    # print("FG = ", fg_inds, "BG", bg_inds, )
     keep_inds = torch.cat([fg_inds, bg_inds], 0)
     # Select sampled values from various arrays:
     labels = labels[keep_inds].contiguous()
