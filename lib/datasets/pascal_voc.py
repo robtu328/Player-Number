@@ -11,6 +11,7 @@ from __future__ import print_function
 import os
 from datasets.imdb import imdb
 import datasets.ds_utils as ds_utils
+import datasets.pac06pars as pac06pars
 import xml.etree.ElementTree as ET
 import numpy as np
 import scipy.sparse
@@ -32,7 +33,22 @@ class pascal_voc(imdb):
         self._image_set = image_set
         self._devkit_path = self._get_default_path()
         self._data_path = os.path.join(self._devkit_path, 'VOC' + self._year)
-        self._classes = (
+        
+        if self._year == '2006':
+          self._classes = (
+            '__background__',  # always index 0
+            'bicycle',
+            'bus',
+            'car',
+            'cat',
+            'cow',
+            'dog',
+            'horse',
+            'motorbike',
+            'person',
+            'sheep')
+        else:    
+          self._classes = (
             '__background__',  # always index 0
             'aeroplane',
             'bicycle',
@@ -56,7 +72,10 @@ class pascal_voc(imdb):
             'tvmonitor')
         self._class_to_ind = dict(
             list(zip(self.classes, list(range(self.num_classes)))))
-        self._image_ext = '.jpg'
+        if self._year == '2006':
+          self._image_ext = '.png'
+        else:
+          self._image_ext = '.jpg'
         self._image_index = self._load_image_set_index()
         # Default to roidb handler
         self._roidb_handler = self.gt_roidb
@@ -87,7 +106,11 @@ class pascal_voc(imdb):
         """
     Construct an image path from the image's "index" identifier.
     """
-        image_path = os.path.join(self._data_path, 'JPEGImages',
+        if self._year == '2006':
+          image_path = os.path.join(self._data_path, 'PNGImages',
+                                  index + self._image_ext)
+        else:                                                                        
+          image_path = os.path.join(self._data_path, 'JPEGImages',
                                   index + self._image_ext)
         assert os.path.exists(image_path), \
           'Path does not exist: {}'.format(image_path)
@@ -162,19 +185,24 @@ class pascal_voc(imdb):
     Load image and bounding boxes info from XML file in the PASCAL VOC
     format.
     """
-        filename = os.path.join(self._data_path, 'Annotations', index + '.xml')
-        tree = ET.parse(filename)
-        objs = tree.findall('object')
-        if not self.config['use_diff']:
-            # Exclude the samples labeled as difficult
-            non_diff_objs = [
-                obj for obj in objs if int(obj.find('difficult').text) == 0
-            ]
-            # if len(non_diff_objs) != len(objs):
-            #     print 'Removed {} difficult objects'.format(
-            #         len(objs) - len(non_diff_objs))
-            objs = non_diff_objs
-        num_objs = len(objs)
+        if self._year == '2006':
+             filename = os.path.join(self._data_path, 'Annotations', index + '.txt')
+             imgName, num_objs, objectList=pac06pars.pars_06_annotation(filename, useDiff=False)
+        else:
+             filename = os.path.join(self._data_path, 'Annotations', index + '.xml')
+        
+             tree = ET.parse(filename)
+             objs = tree.findall('object')
+             if not self.config['use_diff']:
+                 # Exclude the samples labeled as difficult
+                 non_diff_objs = [
+                     obj for obj in objs if int(obj.find('difficult').text) == 0
+                 ]
+                 # if len(non_diff_objs) != len(objs):
+                 #     print 'Removed {} difficult objects'.format(
+                 #         len(objs) - len(non_diff_objs))
+                 objs = non_diff_objs
+             num_objs = len(objs)
 
         boxes = np.zeros((num_objs, 4), dtype=np.uint16)
         gt_classes = np.zeros((num_objs), dtype=np.int32)
@@ -182,19 +210,32 @@ class pascal_voc(imdb):
         # "Seg" area for pascal is just the box area
         seg_areas = np.zeros((num_objs), dtype=np.float32)
 
-        # Load object bounding boxes into a data frame.
-        for ix, obj in enumerate(objs):
-            bbox = obj.find('bndbox')
-            # Make pixel indexes 0-based
-            x1 = float(bbox.find('xmin').text) - 1
-            y1 = float(bbox.find('ymin').text) - 1
-            x2 = float(bbox.find('xmax').text) - 1
-            y2 = float(bbox.find('ymax').text) - 1
-            cls = self._class_to_ind[obj.find('name').text.lower().strip()]
-            boxes[ix, :] = [x1, y1, x2, y2]
-            gt_classes[ix] = cls
-            overlaps[ix, cls] = 1.0
-            seg_areas[ix] = (x2 - x1 + 1) * (y2 - y1 + 1)
+        if self._year == '2006':
+            for ix in range(num_objs):
+                x1 = float(objectList[ix][1]) - 1
+                y1 = float(objectList[ix][2]) - 1  
+                x2 = float(objectList[ix][3]) - 1
+                y2 = float(objectList[ix][4]) - 1
+                cls = self._class_to_ind[objectList[ix][0]]
+                boxes[ix, :] = [x1, y1, x2, y2]
+                gt_classes[ix] = cls
+                overlaps[ix, cls] = 1.0
+                seg_areas[ix] = (x2 - x1 + 1) * (y2 - y1 + 1)
+
+        else:
+            # Load object bounding boxes into a data frame.
+            for ix, obj in enumerate(objs):
+                bbox = obj.find('bndbox')
+                # Make pixel indexes 0-based
+                x1 = float(bbox.find('xmin').text) - 1
+                y1 = float(bbox.find('ymin').text) - 1
+                x2 = float(bbox.find('xmax').text) - 1
+                y2 = float(bbox.find('ymax').text) - 1
+                cls = self._class_to_ind[obj.find('name').text.lower().strip()]
+                boxes[ix, :] = [x1, y1, x2, y2]
+                gt_classes[ix] = cls
+                overlaps[ix, cls] = 1.0
+                seg_areas[ix] = (x2 - x1 + 1) * (y2 - y1 + 1)
 
         overlaps = scipy.sparse.csr_matrix(overlaps)
 
