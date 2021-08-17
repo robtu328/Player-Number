@@ -11,7 +11,8 @@ import xml.etree.ElementTree as ET
 import os
 import pickle
 import numpy as np
-
+#import datasets.pac06pars as pac06pars
+import pac06pars
 
 def parse_rec(filename):
     """ Parse a PASCAL VOC xml file """
@@ -32,6 +33,23 @@ def parse_rec(filename):
         ]
         objects.append(obj_struct)
 
+    return objects
+
+def parse_rec_06(filename):
+    imgName, num_objs, objectList=pac06pars.pars_06_annotation(filename, useDiff=True)
+    objects=[]
+    for i in range(num_objs):
+       obj_struct = {}
+       obj_struct['name'] = objectList[i][0]
+       obj_struct['pose'] = 'Left'
+       obj_struct['truncated'] = objectList[i][5]
+       obj_struct['difficult'] = objectList[i][6]
+       obj_struct['bbox'] = [int(objectList[i][1]),
+                             int(objectList[i][2]),
+                             int(objectList[i][3]),
+                             int(objectList[i][4])]
+       objects.append(obj_struct)
+       
     return objects
 
 
@@ -76,7 +94,8 @@ def voc_eval(detpath,
              cachedir,
              ovthresh=0.5,
              use_07_metric=False,
-             use_diff=False):
+             use_diff=False,
+             use_06_metric=False):
     """rec, prec, ap = voc_eval(detpath,
                               annopath,
                               imagesetfile,
@@ -115,7 +134,13 @@ def voc_eval(detpath,
         # load annotations
         recs = {}
         for i, imagename in enumerate(imagenames):
-            recs[imagename] = parse_rec(annopath.format(imagename))
+            if(use_06_metric==True):
+
+              recs[imagename]=parse_rec_06(annopath.format(imagename))
+             
+            else:
+              recs[imagename] = parse_rec(annopath.format(imagename))
+              
             if i % 100 == 0:
                 print('Reading annotation for {:d}/{:d}'.format(
                     i + 1, len(imagenames)))
@@ -217,3 +242,52 @@ def voc_eval(detpath,
     ap = voc_ap(rec, prec, use_07_metric)
 
     return rec, prec, ap
+
+
+
+if __name__ == '__main__':
+    dirs = os.listdir("./" )
+    
+    
+    objects=parse_rec("../../../data/VOCdevkit2007/VOC2007/Annotations/000001.xml")
+    print (objects)
+
+    #imgName, num_objs, objectList=pac06pars.pars_06_annotation("../../../data/VOCdevkit2006/VOC2006/Annotations/005304.txt", False)
+    #pac06pars.pars_06_annotation("000004.txt", False)
+    #print (imgName, num_objs)
+    
+    imgName, num_objs, objectList=pac06pars.pars_06_annotation("../../../data/VOCdevkit2006/VOC2006/Annotations/005301.txt", True)
+    #pac06pars.pars_06_annotation("000004.txt", False)
+    print (imgName, num_objs)
+    
+    
+    objects=[]
+    
+    for i in range(num_objs):
+      obj_struct = {}
+      obj_struct['name'] = objectList[i][0]
+      obj_struct['pose'] = 'Left'
+      obj_struct['truncated'] = objectList[i][5]
+      obj_struct['difficult'] = objectList[i][6]
+      obj_struct['bbox'] = [int(objectList[i][1]),
+                            int(objectList[i][2]),
+                            int(objectList[i][3]),
+                            int(objectList[i][4])]
+      objects.append(obj_struct)
+    
+    print(objects)
+    
+    rec, prec, ap = voc_eval(
+                "../../../data/VOCdevkit2006/results/VOC2006/Main/test.txt",
+                "../../../data/VOCdevkit2006/VOC2006/Annotations/{:s}.txt",
+                "../../../data/VOCdevkit2006/VOC2006/ImageSets/Main/trainval.txt",
+                "bicycle",
+                "../../../data/VOCdevkit2006/annotations_cache",
+                ovthresh=0.5,
+                use_07_metric=True,
+                use_diff=True,
+                use_06_metric=True)
+    
+    print(rec, prec, ap )
+    
+    

@@ -280,8 +280,19 @@ class pascal_voc(imdb):
                                 dets[k, 3] + 1))
 
     def _do_python_eval(self, output_dir='output'):
-        annopath = os.path.join(self._devkit_path, 'VOC' + self._year,
+        
+        if self._year == '2006':
+             annopath = os.path.join(self._devkit_path, 'VOC' + self._year,
+                                'Annotations', '{:s}.txt')
+        else:
+             annopath = os.path.join(self._devkit_path, 'VOC' + self._year,
                                 'Annotations', '{:s}.xml')
+        
+        #annopath = os.path.join(self._devkit_path, 'VOC' + self._year,
+        #                        'Annotations', '{:s}.xml')
+        
+        
+        
         imagesetfile = os.path.join(self._devkit_path, 'VOC' + self._year,
                                     'ImageSets', 'Main',
                                     self._image_set + '.txt')
@@ -289,6 +300,7 @@ class pascal_voc(imdb):
         aps = []
         # The PASCAL VOC metric changed in 2010
         use_07_metric = True if int(self._year) < 2010 else False
+        use_06_metric = True if int(self._year) == 2006 else False
         print('VOC07 metric? ' + ('Yes' if use_07_metric else 'No'))
         if not os.path.isdir(output_dir):
             os.mkdir(output_dir)
@@ -304,7 +316,8 @@ class pascal_voc(imdb):
                 cachedir,
                 ovthresh=0.5,
                 use_07_metric=use_07_metric,
-                use_diff=self.config['use_diff'])
+                use_diff=self.config['use_diff'],
+                use_06_metric=use_06_metric)
             aps += [ap]
             print(('AP for {} = {:.4f}'.format(cls, ap)))
             with open(os.path.join(output_dir, cls + '_pr.pkl'), 'wb') as f:
