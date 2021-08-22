@@ -428,7 +428,7 @@ class Network(nn.Module):
         self.rpn_bbox_pred_net = nn.Conv2d(cfg.RPN_CHANNELS,
                                            self._num_anchors * 4, [1, 1])
 
-        self.cls_score_net = CapsNet(28, self._net_conv_channels, self._num_classes)
+        self.cls_score_net = CapsNet(28, self._net_conv_channels, self._num_classes, self._device)
         #self.cls_score_net = CapsNet(3, self._num_classes)
         # self.cls_score_net = nn.Linear(self._fc7_channels, self._num_classes) ##### <------- CAPS
         self.bbox_pred_net = nn.Linear(self._fc7_channels,

@@ -118,6 +118,10 @@ if __name__ == '__main__':
     else:
         raise NotImplementedError
 
+    if not torch.cuda.is_available():
+        net._device = 'cpu'
+    net._device = 'cpu'
+    
     # load model
     net.create_architecture(
         imdb.num_classes,
@@ -126,8 +130,7 @@ if __name__ == '__main__':
         anchor_ratios=cfg.ANCHOR_RATIOS)
 
     net.eval()
-    if not torch.cuda.is_available():
-        net._device = 'cpu'
+
     net.to(net._device)
 
     if args.model:

@@ -50,6 +50,7 @@ class ConvLayer(nn.Module):
                                stride=1, 
                                padding=2
                              )
+        self._device = 'cuda'
     def forward(self, x):
         return F.relu(self.conv(x))
 
@@ -62,6 +63,7 @@ class PrimaryCaps(nn.Module):
             nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=2, padding=0) for _ in range(num_capsules)])
         # self.capsules = nn.ModuleList([
             # nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, stride=1, padding=1) for _ in range(num_capsules)])
+        self._device = 'cuda'
 
 
     def forward(self, x):
@@ -182,7 +184,7 @@ class Decoder(nn.Module):
 
 
 class CapsNet(nn.Module):
-    def __init__(self, img_size = 28, num_filters = 512, num_classes = 3):
+    def __init__(self, img_size = 28, num_filters = 512, num_classes = 3, device = 'cuda'):
         super(CapsNet, self).__init__()
         #self.conv_layer = ConvLayer(in_channels=num_filters)
         self.conv_layer = ConvLayer(out_channels=num_filters)
@@ -192,6 +194,12 @@ class CapsNet(nn.Module):
         self.decoder = Decoder(num_class=num_classes)
         self.mse_loss = nn.MSELoss()
         self._img_size = img_size
+        self._device = device
+        self.conv_layer._device = device
+        self.primary_capsules._device = device
+        self.digit_capsules._device = device
+        self.decoder._device = device
+        
 
     def forward(self, data):
         #tmp=self.conv_layer(data)

@@ -11,8 +11,8 @@ import xml.etree.ElementTree as ET
 import os
 import pickle
 import numpy as np
-#import datasets.pac06pars as pac06pars
-import pac06pars
+import datasets.pac06pars as pac06pars
+#import pac06pars
 
 def parse_rec(filename):
     """ Parse a PASCAL VOC xml file """
